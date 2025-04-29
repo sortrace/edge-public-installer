@@ -17,7 +17,7 @@ The `edge-updater` repository provides all scripts needed for setting up and man
 To install and configure a Sortrace device in one line, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main/install.sh | bash -s -- --github-token "<your-github-token>" --scaleway-token "<your-scaleway-token>" --hostname "truck-001" --tailscale-key "<your-tailscale-key>" --sim-pin "1234" --wifi-ssid "YourSSID" --wifi-password "YourWiFiPassword"
+curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main/install.sh | sudo bash -s -- --github-token "<your-github-token>" --scaleway-token "<your-scaleway-token>" --hostname "truck-001" --tailscale-key "<your-tailscale-key>" --sim-pin "1234" --wifi-ssid "YourSSID" --wifi-password "YourWiFiPassword"
 ```
 
 ### Supported Arguments for `install.sh`
