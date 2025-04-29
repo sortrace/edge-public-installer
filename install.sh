@@ -73,11 +73,16 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   PAYLOAD=$(jq -n --arg title "$DEVICE_HOSTNAME" --arg key "$PUBLIC_KEY_CONTENT" '{title: $title, key: $key, read_only: true}')
 
   echo "[SETUP] Uploading deploy key to GitHub repo..."
-  curl -u "$GITHUB_USERNAME:$GITHUB_PASSWORD" \
+  if ! curl -u "$GITHUB_USERNAME:$GITHUB_PASSWORD" \
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \
     https://api.github.com/repos/sortrace/edge-updater/keys \
-    -d "$PAYLOAD"
+    -d "$PAYLOAD"; then
+    echo "[ERROR] Failed to upload deploy key to GitHub."
+    echo "[CLEANUP] Removing generated SSH key..."
+    rm -f "$SSH_KEY_PATH" "$SSH_KEY_PATH.pub"
+    exit 1
+  fi
 fi
 
 # Start SSH agent and add key
