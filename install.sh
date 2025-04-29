@@ -9,22 +9,59 @@ SSH_KEY_PATH="/etc/sortrace/id_ed25519"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
-  case "$1" in
+  key="$1"
+
+  case $key in
     --hostname)
       NEW_HOSTNAME="$2"
-      shift 2
+      shift; shift
+      ;;
+    --tailscale-key)
+      TAILSCALE_KEY="$2"
+      shift; shift
+      ;;
+    --scaleway-access-key)
+      SCALEWAY_ACCESS_KEY="$2"
+      shift; shift
+      ;;
+    --scaleway-secret-key)
+      SCALEWAY_SECRET_KEY="$2"
+      shift; shift
+      ;;
+    --sim-pin)
+      SIM_PIN="$2"
+      shift; shift
+      ;;
+    --wifi-ssid)
+      WIFI_SSID="$2"
+      shift; shift
+      ;;
+    --wifi-password)
+      WIFI_PASSWORD="$2"
+      shift; shift
       ;;
     *)
-      FORWARD_ARGS+=" $1"
-      shift
+      echo "[INSTALL] Unknown option: $1"
+      exit 1
       ;;
   esac
 done
 
-# Validate hostname
+mkdir -p /etc/sortrace
+
+# Validate or Prompt Missing Inputs
 CURRENT_HOSTNAME=$(hostname)
 
-if [ -n "$NEW_HOSTNAME" ]; then
+if [ -z "$NEW_HOSTNAME" ]; then
+  if [[ "$CURRENT_HOSTNAME" == edge-* ]]; then
+    echo "[INSTALL] Using existing hostname: $CURRENT_HOSTNAME"
+    DEVICE_HOSTNAME="$CURRENT_HOSTNAME"
+  else
+    read -p "[INSTALL] Enter hostname (must start with 'edge-'): " NEW_HOSTNAME < /dev/tty
+    DEVICE_HOSTNAME="$NEW_HOSTNAME"
+    hostnamectl set-hostname "$NEW_HOSTNAME"
+  fi
+else
   if [[ "$NEW_HOSTNAME" == "$CURRENT_HOSTNAME" ]]; then
     echo "[INSTALL] Hostname already set to $NEW_HOSTNAME. Skipping hostname change."
     DEVICE_HOSTNAME="$NEW_HOSTNAME"
@@ -33,21 +70,37 @@ if [ -n "$NEW_HOSTNAME" ]; then
     hostnamectl set-hostname "$NEW_HOSTNAME"
     DEVICE_HOSTNAME="$NEW_HOSTNAME"
   fi
-elif [[ "$CURRENT_HOSTNAME" == edge-* ]]; then
-  echo "[INSTALL] Using existing hostname: $CURRENT_HOSTNAME"
-  DEVICE_HOSTNAME="$CURRENT_HOSTNAME"
-else
-  echo "[ERROR] No --hostname provided and existing hostname ($CURRENT_HOSTNAME) does not start with 'edge-'."
-  echo "Please rerun the install script with: --hostname edge-yourdevice"
-  exit 1
 fi
 
+if [ -z "$TAILSCALE_KEY" ]; then
+  echo
+  echo "[INSTALL] You must create a Tailscale auth key:"
+  echo "  👉 https://login.tailscale.com/admin/settings/keys"
+  echo
+  read -p "[INSTALL] Enter Tailscale Auth Key: " TAILSCALE_KEY < /dev/tty
+fi
+
+if [ -z "$SCALEWAY_ACCESS_KEY" ]; then
+  echo
+  echo "[INSTALL] You must create Scaleway API keys:"
+  echo "  👉 https://console.scaleway.com/iam/api-keys"
+  echo "[INSTALL] Required permissions:"
+  echo "  - Write access to 'sortrace-uploads'"
+  echo "  - Read-only access to 'sortrace-edge-configs'"
+  echo
+  read -p "[INSTALL] Enter Scaleway Access Key (Access Key ID): " SCALEWAY_ACCESS_KEY < /dev/tty
+fi
+
+if [ -z "$SCALEWAY_SECRET_KEY" ]; then
+  read -s -p "[INSTALL] Enter Scaleway Secret Key: " SCALEWAY_SECRET_KEY < /dev/tty
+  echo
+fi
 
 # Update /etc/hosts
 if grep -q "^127.0.1.1" /etc/hosts; then
-  sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts
+  sed -i "s/^127.0.1.1.*/127.0.1.1   $DEVICE_HOSTNAME/" /etc/hosts
 else
-  echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
+  echo "127.0.1.1   $DEVICE_HOSTNAME" >> /etc/hosts
 fi
 
 # Ensure necessary packages
@@ -120,6 +173,13 @@ fi
 
 # Run setup.sh with forwarded arguments
 echo "[INSTALL] Running setup.sh..."
-bash "$REPO_DIR/setup.sh" $FORWARD_ARGS
+bash "$REPO_DIR/setup.sh" \
+  --hostname "$DEVICE_HOSTNAME" \
+  --tailscale-key "$TAILSCALE_KEY" \
+  --scaleway-access-key "$SCALEWAY_ACCESS_KEY" \
+  --scaleway-secret-key "$SCALEWAY_SECRET_KEY" \
+  ${SIM_PIN:+--sim-pin "$SIM_PIN"} \
+  ${WIFI_SSID:+--wifi-ssid "$WIFI_SSID"} \
+  ${WIFI_PASSWORD:+--wifi-password "$WIFI_PASSWORD"}
 
 echo "[INSTALL] Installation complete!"
