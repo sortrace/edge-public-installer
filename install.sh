@@ -51,8 +51,8 @@ fi
 
 # Ensure necessary packages
 echo "[SETUP] Installing required packages..."
-apt-get update
-apt-get install -y git openssh-client curl jq
+apt-get update -qq
+apt-get install -y -qq git openssh-client curl jq
 
 # Add GitHub to known hosts
 if ! grep -q "^github.com " ~/.ssh/known_hosts 2>/dev/null; then
