@@ -14,10 +14,6 @@ while [[ $# -gt 0 ]]; do
       NEW_HOSTNAME="$2"
       shift 2
       ;;
-    --github-pat)
-      GITHUB_PAT="$2"
-      shift 2
-      ;;
     *)
       FORWARD_ARGS+=" $1"
       shift
@@ -67,28 +63,20 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   echo "[INSTALL] No SSH key found. Generating a new one..."
   mkdir -p "$(dirname "$SSH_KEY_PATH")"
   ssh-keygen -t ed25519 -C "$DEVICE_HOSTNAME" -f "$SSH_KEY_PATH" -N ""
-
-  # Check that GitHub PAT is provided
-  if [ -z "$GITHUB_PAT" ]; then
-    echo "[INSTALL] No GitHub PAT provided via --github-pat. Asking interactively..."
-    read -s -p "GitHub Fine-Grained Personal Access Token: " GITHUB_PAT < /dev/tty
-    echo
-  fi
-
-  PUBLIC_KEY_CONTENT=$(cat "$SSH_KEY_PATH.pub")
-  PAYLOAD=$(jq -n --arg title "$DEVICE_HOSTNAME" --arg key "$PUBLIC_KEY_CONTENT" '{title: $title, key: $key, read_only: true}')
-
-  echo "[INSTALL] Uploading deploy key to GitHub repo..."
-  if ! curl -s -X POST \
-    -H "Authorization: Bearer $GITHUB_PAT" \
-    -H "Accept: application/vnd.github+json" \
-    https://api.github.com/repos/sortrace/edge-updater/keys \
-    -d "$PAYLOAD"; then
-    echo "[ERROR] Failed to upload deploy key to GitHub."
-    echo "[CLEANUP] Removing generated SSH key..."
-    rm -f "$SSH_KEY_PATH" "$SSH_KEY_PATH.pub"
-    exit 1
-  fi
+  
+  echo
+  echo "[INSTALL] =================================================="
+  echo "[INSTALL] SSH public key generated:"
+  echo
+  cat "$SSH_KEY_PATH.pub"
+  echo
+  echo "[INSTALL] =================================================="
+  echo "[INSTALL] Please copy the above public key and add it as a Deploy Key to:"
+  echo "         https://github.com/sortrace/edge-updater/settings/keys"
+  echo "[INSTALL] (Set it as Read-Only)"
+  echo
+  read -n 1 -s -r -p "[INSTALL] Press any key to continue after the Deploy Key has been added..."
+  echo
 else
   echo "[INSTALL] SSH key already present. Skipping key generation."
 fi
