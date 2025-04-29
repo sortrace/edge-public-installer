@@ -75,7 +75,7 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   echo "         https://github.com/sortrace/edge-updater/settings/keys"
   echo "[INSTALL] (Set it as Read-Only)"
   echo
-  read -n 1 -s -r -p "[INSTALL] Press any key to continue after the Deploy Key has been added..."
+  read -n 1 -s -r -p "[INSTALL] Press any key to continue after the Deploy Key has been added..." < /dev/tty
   echo
 else
   echo "[INSTALL] SSH key already present. Skipping key generation."
