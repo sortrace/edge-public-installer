@@ -71,9 +71,9 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
 
   echo "[SETUP] Please provide GitHub credentials to upload the deploy key."
   if [ -z "$GITHUB_USERNAME" ]; then
-    read -p "GitHub Username: " GITHUB_USERNAME
+    read -p "GitHub Username: " GITHUB_USERNAME < /dev/tty
   fi
-  read -s -p "GitHub Password or Token: " GITHUB_PASSWORD
+  read -s -p "GitHub Password or Token: " GITHUB_PASSWORD < /dev/tty
   echo
 
   PUBLIC_KEY_CONTENT=$(cat "$SSH_KEY_PATH.pub")
