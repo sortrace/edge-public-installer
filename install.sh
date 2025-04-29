@@ -14,21 +14,12 @@ while [[ $# -gt 0 ]]; do
       NEW_HOSTNAME="$2"
       shift 2
       ;;
-    --github-username)
-      GITHUB_USERNAME="$2"
-      shift 2
-      ;;
-    --github-password)
-      GITHUB_PASSWORD="$2"
-      shift 2
-      ;;
     *)
       FORWARD_ARGS+=" $1"
       shift
       ;;
   esac
 done
-
 
 # Validate hostname
 CURRENT_HOSTNAME=$(hostname)
@@ -73,12 +64,11 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   mkdir -p "$(dirname "$SSH_KEY_PATH")"
   ssh-keygen -t ed25519 -C "$DEVICE_HOSTNAME" -f "$SSH_KEY_PATH" -N ""
 
-  # Check that GitHub credentials are provided
-  if [ -z "$GITHUB_USERNAME" ] || [ -z "$GITHUB_PASSWORD" ]; then
-    echo "[ERROR] --github-username and --github-password must be provided when no SSH key exists."
-    rm -f "$SSH_KEY_PATH" "$SSH_KEY_PATH.pub"
-    exit 1
-  fi
+  # Prompt for GitHub credentials
+  echo "[SETUP] Deploy key requires GitHub credentials with admin access to the repo."
+  read -p "GitHub Username: " GITHUB_USERNAME < /dev/tty
+  read -s -p "GitHub Password or Token: " GITHUB_PASSWORD < /dev/tty
+  echo
 
   PUBLIC_KEY_CONTENT=$(cat "$SSH_KEY_PATH.pub")
   PAYLOAD=$(jq -n --arg title "$DEVICE_HOSTNAME" --arg key "$PUBLIC_KEY_CONTENT" '{title: $title, key: $key, read_only: true}')
@@ -97,6 +87,7 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
 else
   echo "[SETUP] SSH key already present. Skipping key generation."
 fi
+
 
 # Start SSH agent and add key
 echo "[SETUP] Adding SSH key to agent..."
