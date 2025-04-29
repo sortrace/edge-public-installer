@@ -14,6 +14,10 @@ while [[ $# -gt 0 ]]; do
       NEW_HOSTNAME="$2"
       shift 2
       ;;
+    --github-pat)
+      GITHUB_PAT="$2"
+      shift 2
+      ;;
     *)
       FORWARD_ARGS+=" $1"
       shift
@@ -64,19 +68,20 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   mkdir -p "$(dirname "$SSH_KEY_PATH")"
   ssh-keygen -t ed25519 -C "$DEVICE_HOSTNAME" -f "$SSH_KEY_PATH" -N ""
 
-  # Prompt for GitHub credentials
-  echo "[INSTALL] Deploy key requires GitHub credentials with admin access to the repo."
-  read -p "GitHub Username: " GITHUB_USERNAME < /dev/tty
-  read -s -p "GitHub Password or Token: " GITHUB_PASSWORD < /dev/tty
-  echo
+  # Check that GitHub PAT is provided
+  if [ -z "$GITHUB_PAT" ]; then
+    echo "[INSTALL] No GitHub PAT provided via --github-pat. Asking interactively..."
+    read -s -p "GitHub Fine-Grained Personal Access Token: " GITHUB_PAT < /dev/tty
+    echo
+  fi
 
   PUBLIC_KEY_CONTENT=$(cat "$SSH_KEY_PATH.pub")
   PAYLOAD=$(jq -n --arg title "$DEVICE_HOSTNAME" --arg key "$PUBLIC_KEY_CONTENT" '{title: $title, key: $key, read_only: true}')
 
   echo "[INSTALL] Uploading deploy key to GitHub repo..."
-  if ! curl -u "$GITHUB_USERNAME:$GITHUB_PASSWORD" \
-    -X POST \
-    -H "Accept: application/vnd.github.v3+json" \
+  if ! curl -s -X POST \
+    -H "Authorization: Bearer $GITHUB_PAT" \
+    -H "Accept: application/vnd.github+json" \
     https://api.github.com/repos/sortrace/edge-updater/keys \
     -d "$PAYLOAD"; then
     echo "[ERROR] Failed to upload deploy key to GitHub."
@@ -87,7 +92,6 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
 else
   echo "[INSTALL] SSH key already present. Skipping key generation."
 fi
-
 
 # Start SSH agent and add key
 echo "[INSTALL] Adding SSH key to agent..."
