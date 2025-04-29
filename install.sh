@@ -42,6 +42,13 @@ else
   exit 1
 fi
 
+# Update /etc/hosts
+if grep -q "^127.0.1.1" /etc/hosts; then
+  sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts
+else
+  echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
+fi
+
 # Ensure necessary packages
 echo "[SETUP] Installing required packages..."
 apt-get update
