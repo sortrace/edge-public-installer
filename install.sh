@@ -90,6 +90,22 @@ echo "[SETUP] Adding SSH key to agent..."
 eval "$(ssh-agent -s)"
 ssh-add "$SSH_KEY_PATH"
 
+# Add SSH config entry for GitHub if missing
+if ! grep -q "Host github.com" /etc/ssh/ssh_config 2>/dev/null; then
+  echo "[SETUP] Adding GitHub SSH config..."
+  cat <<EOF >> /etc/ssh/ssh_config
+
+# Sortrace Edge Device GitHub Access
+Host github.com
+    HostName github.com
+    User git
+    IdentityFile $SSH_KEY_PATH
+    IdentitiesOnly yes
+EOF
+else
+  echo "[SETUP] GitHub SSH config already present."
+fi
+
 # Clone or pull repo
 if [ -d "$REPO_DIR/.git" ]; then
   echo "[SETUP] Repo already exists. Pulling latest changes..."
