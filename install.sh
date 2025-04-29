@@ -47,6 +47,15 @@ echo "[SETUP] Installing required packages..."
 apt-get update
 apt-get install -y git openssh-client curl jq
 
+# Add GitHub to known hosts
+if ! grep -q "^github.com " ~/.ssh/known_hosts 2>/dev/null; then
+  echo "[SETUP] Adding GitHub SSH fingerprint to known_hosts..."
+  mkdir -p ~/.ssh
+  ssh-keyscan github.com >> ~/.ssh/known_hosts
+else
+  echo "[SETUP] GitHub SSH fingerprint already present."
+fi
+
 # Generate SSH key if missing
 if [ ! -f "$SSH_KEY_PATH" ]; then
   echo "[SETUP] No SSH key found. Generating a new one..."
