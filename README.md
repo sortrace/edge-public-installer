@@ -1,6 +1,6 @@
-# Sortrace Edge Updater
+# Sortrace Edge Installer
 
-The `edge-updater` repository provides all scripts needed for setting up and managing Sortrace truck devices remotely. It ensures devices can be installed, configured, and updated easily through a unified setup process.
+The `edge-public-installer` repository provides all scripts needed for setting up and managing Sortrace truck devices remotely. It ensures devices can be installed, configured, and updated easily through a unified setup process.
 
 ---
 
