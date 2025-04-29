@@ -25,11 +25,11 @@ done
 CURRENT_HOSTNAME=$(hostname)
 
 if [ -n "$NEW_HOSTNAME" ]; then
-  echo "[SETUP] Setting hostname to $NEW_HOSTNAME"
+  echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
   hostnamectl set-hostname "$NEW_HOSTNAME"
   DEVICE_HOSTNAME="$NEW_HOSTNAME"
 elif [[ "$CURRENT_HOSTNAME" == edge-* ]]; then
-  echo "[SETUP] Using existing hostname: $CURRENT_HOSTNAME"
+  echo "[INSTALL] Using existing hostname: $CURRENT_HOSTNAME"
   DEVICE_HOSTNAME="$CURRENT_HOSTNAME"
 else
   echo "[ERROR] No --hostname provided and existing hostname ($CURRENT_HOSTNAME) does not start with 'edge-'."
@@ -45,27 +45,27 @@ else
 fi
 
 # Ensure necessary packages
-echo "[SETUP] Installing required packages..."
+echo "[INSTALL] Installing required packages..."
 apt-get update -qq
 apt-get install -y -qq git openssh-client curl jq
 
 # Add GitHub to known hosts
 if ! grep -q "^github.com " ~/.ssh/known_hosts 2>/dev/null; then
-  echo "[SETUP] Adding GitHub SSH fingerprint to known_hosts..."
+  echo "[INSTALL] Adding GitHub SSH fingerprint to known_hosts..."
   mkdir -p ~/.ssh
   ssh-keyscan github.com >> ~/.ssh/known_hosts
 else
-  echo "[SETUP] GitHub SSH fingerprint already present."
+  echo "[INSTALL] GitHub SSH fingerprint already present."
 fi
 
 # Generate SSH key if missing
 if [ ! -f "$SSH_KEY_PATH" ]; then
-  echo "[SETUP] No SSH key found. Generating a new one..."
+  echo "[INSTALL] No SSH key found. Generating a new one..."
   mkdir -p "$(dirname "$SSH_KEY_PATH")"
   ssh-keygen -t ed25519 -C "$DEVICE_HOSTNAME" -f "$SSH_KEY_PATH" -N ""
 
   # Prompt for GitHub credentials
-  echo "[SETUP] Deploy key requires GitHub credentials with admin access to the repo."
+  echo "[INSTALL] Deploy key requires GitHub credentials with admin access to the repo."
   read -p "GitHub Username: " GITHUB_USERNAME < /dev/tty
   read -s -p "GitHub Password or Token: " GITHUB_PASSWORD < /dev/tty
   echo
@@ -73,7 +73,7 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
   PUBLIC_KEY_CONTENT=$(cat "$SSH_KEY_PATH.pub")
   PAYLOAD=$(jq -n --arg title "$DEVICE_HOSTNAME" --arg key "$PUBLIC_KEY_CONTENT" '{title: $title, key: $key, read_only: true}')
 
-  echo "[SETUP] Uploading deploy key to GitHub repo..."
+  echo "[INSTALL] Uploading deploy key to GitHub repo..."
   if ! curl -u "$GITHUB_USERNAME:$GITHUB_PASSWORD" \
     -X POST \
     -H "Accept: application/vnd.github.v3+json" \
@@ -85,18 +85,18 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     exit 1
   fi
 else
-  echo "[SETUP] SSH key already present. Skipping key generation."
+  echo "[INSTALL] SSH key already present. Skipping key generation."
 fi
 
 
 # Start SSH agent and add key
-echo "[SETUP] Adding SSH key to agent..."
+echo "[INSTALL] Adding SSH key to agent..."
 eval "$(ssh-agent -s)"
 ssh-add "$SSH_KEY_PATH"
 
 # Add SSH config entry for GitHub if missing
 if ! grep -q "Host github.com" /etc/ssh/ssh_config 2>/dev/null; then
-  echo "[SETUP] Adding GitHub SSH config..."
+  echo "[INSTALL] Adding GitHub SSH config..."
   cat <<EOF >> /etc/ssh/ssh_config
 
 # Sortrace Edge Device GitHub Access
@@ -107,21 +107,21 @@ Host github.com
     IdentitiesOnly yes
 EOF
 else
-  echo "[SETUP] GitHub SSH config already present."
+  echo "[INSTALL] GitHub SSH config already present."
 fi
 
 # Clone or pull repo
 if [ -d "$REPO_DIR/.git" ]; then
-  echo "[SETUP] Repo already exists. Pulling latest changes..."
+  echo "[INSTALL] Repo already exists. Pulling latest changes..."
   git -C "$REPO_DIR" pull
 else
-  echo "[SETUP] Cloning repo..."
+  echo "[INSTALL] Cloning repo..."
   mkdir -p "$(dirname "$REPO_DIR")"
   git clone "$REPO_URL" "$REPO_DIR"
 fi
 
 # Run setup.sh with forwarded arguments
-echo "[SETUP] Running setup.sh..."
+echo "[INSTALL] Running setup.sh..."
 bash "$REPO_DIR/setup.sh" $FORWARD_ARGS
 
-echo "[SETUP] Installation complete!"
+echo "[INSTALL] Installation complete!"
