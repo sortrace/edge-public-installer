@@ -25,9 +25,14 @@ done
 CURRENT_HOSTNAME=$(hostname)
 
 if [ -n "$NEW_HOSTNAME" ]; then
-  echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
-  hostnamectl set-hostname "$NEW_HOSTNAME"
-  DEVICE_HOSTNAME="$NEW_HOSTNAME"
+  if [[ "$NEW_HOSTNAME" == "$CURRENT_HOSTNAME" ]]; then
+    echo "[INSTALL] Hostname already set to $NEW_HOSTNAME. Skipping hostname change."
+    DEVICE_HOSTNAME="$NEW_HOSTNAME"
+  else
+    echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
+    hostnamectl set-hostname "$NEW_HOSTNAME"
+    DEVICE_HOSTNAME="$NEW_HOSTNAME"
+  fi
 elif [[ "$CURRENT_HOSTNAME" == edge-* ]]; then
   echo "[INSTALL] Using existing hostname: $CURRENT_HOSTNAME"
   DEVICE_HOSTNAME="$CURRENT_HOSTNAME"
@@ -36,6 +41,7 @@ else
   echo "Please rerun the install script with: --hostname edge-yourdevice"
   exit 1
 fi
+
 
 # Update /etc/hosts
 if grep -q "^127.0.1.1" /etc/hosts; then
