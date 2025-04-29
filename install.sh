@@ -90,6 +90,8 @@ if [ ! -f "$SSH_KEY_PATH" ]; then
     rm -f "$SSH_KEY_PATH" "$SSH_KEY_PATH.pub"
     exit 1
   fi
+else
+  echo "[SETUP] GitHub key already present."
 fi
 
 # Start SSH agent and add key
