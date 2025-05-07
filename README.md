@@ -37,7 +37,7 @@ curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main
 
 3. Choose options:
 
-   - **Tags:** _(Optional) Assign tags if needed for ACLs._
+   - **Tags:** _Assign tag:test or tag:prod depending on environment._
    - **Ephemeral:** _(Optional) You can leave it off for Sortrace devices._
    - **Reusable:** ✅ Enable **Reusable**, so you can use the key multiple times if needed.
    - **Expiration:** Set a reasonable expiration (e.g., 7 days).

@@ -20,14 +20,6 @@ while [[ $# -gt 0 ]]; do
       TAILSCALE_KEY="$2"
       shift; shift
       ;;
-    --scaleway-access-key)
-      SCALEWAY_ACCESS_KEY="$2"
-      shift; shift
-      ;;
-    --scaleway-secret-key)
-      SCALEWAY_SECRET_KEY="$2"
-      shift; shift
-      ;;
     --sim-pin)
       SIM_PIN="$2"
       shift; shift
@@ -78,22 +70,6 @@ if [ -z "$TAILSCALE_KEY" ]; then
   echo "  👉 https://login.tailscale.com/admin/settings/keys"
   echo
   read -p "[INSTALL] Enter Tailscale Auth Key: " TAILSCALE_KEY < /dev/tty
-fi
-
-if [ -z "$SCALEWAY_ACCESS_KEY" ]; then
-  echo
-  echo "[INSTALL] You must create Scaleway API keys:"
-  echo "  👉 https://console.scaleway.com/iam/api-keys"
-  echo "[INSTALL] Required permissions:"
-  echo "  - Write access to 'sortrace-uploads'"
-  echo "  - Read-only access to 'sortrace-edge-configs'"
-  echo
-  read -p "[INSTALL] Enter Scaleway Access Key (Access Key ID): " SCALEWAY_ACCESS_KEY < /dev/tty
-fi
-
-if [ -z "$SCALEWAY_SECRET_KEY" ]; then
-  read -s -p "[INSTALL] Enter Scaleway Secret Key: " SCALEWAY_SECRET_KEY < /dev/tty
-  echo
 fi
 
 # Update /etc/hosts
@@ -176,8 +152,6 @@ echo "[INSTALL] Running setup.sh..."
 bash "$REPO_DIR/setup.sh" \
   --hostname "$DEVICE_HOSTNAME" \
   --tailscale-key "$TAILSCALE_KEY" \
-  --scaleway-access-key "$SCALEWAY_ACCESS_KEY" \
-  --scaleway-secret-key "$SCALEWAY_SECRET_KEY" \
   ${SIM_PIN:+--sim-pin "$SIM_PIN"} \
   ${WIFI_SSID:+--wifi-ssid "$WIFI_SSID"} \
   ${WIFI_PASSWORD:+--wifi-password "$WIFI_PASSWORD"}
