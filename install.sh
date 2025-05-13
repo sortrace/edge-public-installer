@@ -118,7 +118,7 @@ if [[ -z "$BOOTSTRAP_IMAGE_URL" || "$BOOTSTRAP_IMAGE_URL" == "null" ]]; then
 fi
 
 echo "[INSTALL] Downloading bootstrap image tarball from $BOOTSTRAP_IMAGE_URL"
-curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar.gz
+curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar
 
 echo "[INSTALL] Decompressing tarball..."
 gunzip -f /tmp/bootstrap-image.tar.gz
