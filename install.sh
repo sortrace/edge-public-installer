@@ -105,4 +105,40 @@ echo "[INSTALL] Fetching edge metadata for hostname: $NEW_HOSTNAME"
 META_JSON=$(curl -sf "$EDGE_API_URL/edge-meta/$NEW_HOSTNAME")
 
 BOOTSTRAP_IMAGE_NAME=$(echo "$META_JSON" | jq -r '.bootstrap.image')
-if [[ -]()]()
+if [[ -z "$BOOTSTRAP_IMAGE_NAME" || "$BOOTSTRAP_IMAGE_NAME" == "null" ]]; then
+  echo "[INSTALL] ERROR: Failed to extract bootstrap image name from metadata"
+  exit 1
+fi
+
+echo "[INSTALL] Resolving signed URL for image: $BOOTSTRAP_IMAGE_NAME"
+BOOTSTRAP_IMAGE_URL=$(curl -sf "$EDGE_API_URL/image-url?name=$BOOTSTRAP_IMAGE_NAME" | jq -r .url)
+if [[ -z "$BOOTSTRAP_IMAGE_URL" || "$BOOTSTRAP_IMAGE_URL" == "null" ]]; then
+  echo "[INSTALL] ERROR: Failed to resolve image URL"
+  exit 1
+fi
+
+echo "[INSTALL] Downloading bootstrap image tarball from $BOOTSTRAP_IMAGE_URL"
+curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar.gz
+
+echo "[INSTALL] Decompressing tarball..."
+gunzip -f /tmp/bootstrap-image.tar.gz
+
+# --- Stop existing container if running ---
+if podman container exists edge-device-bootstrap; then
+  echo "[INSTALL] Stopping and removing existing bootstrap container..."
+  podman rm -f edge-device-bootstrap || true
+fi
+
+echo "[INSTALL] Loading bootstrap image into Podman..."
+podman load -i /tmp/bootstrap-image.tar
+
+IMAGE_ID=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 'bootstrap')
+
+echo "[INSTALL] Starting bootstrap container: $IMAGE_ID"
+podman run -d --name edge-device-bootstrap \
+  --restart=always \
+  -v /run/podman/podman.sock:/run/podman/podman.sock \
+  -v /etc/sortrace:/etc/sortrace \
+  $IMAGE_ID
+
+echo "[INSTALL] ✅ Installation complete!"
