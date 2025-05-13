@@ -2,11 +2,6 @@
 
 set -e
 
-# Settings
-REPO_URL="git@github.com:sortrace/edge-updater.git"
-REPO_DIR="/opt/sortrace/edge-updater"
-SSH_KEY_PATH="/etc/sortrace/id_ed25519"
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   key="$1"
@@ -18,6 +13,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tailscale-key)
       TAILSCALE_KEY="$2"
+      shift; shift
+      ;;
+    --bootstrap-image)
+      BOOTSTRAP_IMAGE="$2"
       shift; shift
       ;;
     --sim-pin)
@@ -41,119 +40,94 @@ done
 
 mkdir -p /etc/sortrace
 
-# Validate or Prompt Missing Inputs
-CURRENT_HOSTNAME=$(hostname)
+# Validate bootstrap image
+if [ -z "$BOOTSTRAP_IMAGE" ]; then
+  echo "[INSTALL] ERROR: --bootstrap-image is required (e.g., registry.scaleway.com/sortrace/bootstrap:latest)"
+  exit 1
+fi
 
-if [ -z "$NEW_HOSTNAME" ]; then
-  if [[ "$CURRENT_HOSTNAME" == edge-* ]]; then
-    echo "[INSTALL] Using existing hostname: $CURRENT_HOSTNAME"
-    DEVICE_HOSTNAME="$CURRENT_HOSTNAME"
-  else
-    read -p "[INSTALL] Enter hostname (must start with 'edge-'): " NEW_HOSTNAME < /dev/tty
-    DEVICE_HOSTNAME="$NEW_HOSTNAME"
-    hostnamectl set-hostname "$NEW_HOSTNAME"
-  fi
-else
+# Optional hostname configuration
+if [ -n "$NEW_HOSTNAME" ]; then
+  NEW_HOSTNAME="edge-device-${NEW_HOSTNAME#edge-device-}"  # Force prefix
+  CURRENT_HOSTNAME=$(hostname)
+
   if [[ "$NEW_HOSTNAME" == "$CURRENT_HOSTNAME" ]]; then
-    echo "[INSTALL] Hostname already set to $NEW_HOSTNAME. Skipping hostname change."
-    DEVICE_HOSTNAME="$NEW_HOSTNAME"
+    echo "[INSTALL] Hostname already set to $NEW_HOSTNAME. Skipping change."
   else
     echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
     hostnamectl set-hostname "$NEW_HOSTNAME"
-    DEVICE_HOSTNAME="$NEW_HOSTNAME"
+  fi
+
+  # Update /etc/hosts
+  if grep -q "^127.0.1.1" /etc/hosts; then
+    sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts
+  else
+    echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
   fi
 fi
 
-if [ -z "$TAILSCALE_KEY" ]; then
-  echo
-  echo "[INSTALL] You must create a Tailscale auth key:"
-  echo "  👉 https://login.tailscale.com/admin/settings/keys"
-  echo
-  read -p "[INSTALL] Enter Tailscale Auth Key: " TAILSCALE_KEY < /dev/tty
-fi
-
-# Update /etc/hosts
-if grep -q "^127.0.1.1" /etc/hosts; then
-  sed -i "s/^127.0.1.1.*/127.0.1.1   $DEVICE_HOSTNAME/" /etc/hosts
-else
-  echo "127.0.1.1   $DEVICE_HOSTNAME" >> /etc/hosts
-fi
-
-# Ensure necessary packages
+# Ensure required packages
 echo "[INSTALL] Installing required packages..."
 apt-get update -qq
-apt-get install -y -qq git openssh-client curl jq
+apt-get install -y -qq podman curl jq
 
-# Add GitHub to known hosts
-if ! grep -q "^github.com " ~/.ssh/known_hosts 2>/dev/null; then
-  echo "[INSTALL] Adding GitHub SSH fingerprint to known_hosts..."
-  mkdir -p ~/.ssh
-  ssh-keyscan github.com >> ~/.ssh/known_hosts
+# Tailscale installation and conditional setup
+if [ -n "$TAILSCALE_KEY" ]; then
+  echo "[INSTALL] Installing and configuring Tailscale..."
+  curl -fsSL https://tailscale.com/install.sh | sh
+  systemctl enable --now tailscaled
+
+  if ! tailscale status &>/dev/null; then
+    echo "[INSTALL] Connecting to Tailscale with provided key..."
+    tailscale up --authkey "$TAILSCALE_KEY"
+  else
+    echo "[INSTALL] Tailscale already connected."
+  fi
 else
-  echo "[INSTALL] GitHub SSH fingerprint already present."
+  echo "[INSTALL] No Tailscale key provided. Checking existing connection..."
+  if ! command -v tailscale &>/dev/null || ! tailscale status &>/dev/null; then
+    echo "[INSTALL] ERROR: Tailscale not set up and no key provided. Exiting."
+    exit 1
+  else
+    echo "[INSTALL] Tailscale is already running."
+  fi
 fi
 
-# Generate SSH key if missing
-if [ ! -f "$SSH_KEY_PATH" ]; then
-  echo "[INSTALL] No SSH key found. Generating a new one..."
-  mkdir -p "$(dirname "$SSH_KEY_PATH")"
-  ssh-keygen -t ed25519 -C "$DEVICE_HOSTNAME" -f "$SSH_KEY_PATH" -N ""
-  
-  echo
-  echo "[INSTALL] =================================================="
-  echo "[INSTALL] SSH public key generated:"
-  echo
-  cat "$SSH_KEY_PATH.pub"
-  echo
-  echo "[INSTALL] =================================================="
-  echo "[INSTALL] Please copy the above public key and add it as a Deploy Key to:"
-  echo "         https://github.com/sortrace/edge-updater/settings/keys"
-  echo "[INSTALL] (Set it as Read-Only)"
-  echo
-  read -n 1 -s -r -p "[INSTALL] Press any key to continue after the Deploy Key has been added..." < /dev/tty
-  echo
-else
-  echo "[INSTALL] SSH key already present. Skipping key generation."
+# Configure 4G modem if SIM PIN provided
+if [ -n "$SIM_PIN" ]; then
+  echo "[INSTALL] Configuring 4G modem..."
+  apt-get install -y -qq mmcli network-manager
+  mmcli -i 0 --disable-pin --pin="$SIM_PIN"
+  mmcli -m 0 --simple-connect="apn=online.telia.se"
+  mmcli -m 0 --enable
 fi
 
-# Start SSH agent and add key
-echo "[INSTALL] Adding SSH key to agent..."
-eval "$(ssh-agent -s)"
-ssh-add "$SSH_KEY_PATH"
+# Configure WiFi if credentials are provided
+if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
+  echo "[INSTALL] Configuring WiFi..."
+  WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
+  cat <<EOF >> "$WPA_CONF"
 
-# Add SSH config entry for GitHub if missing
-if ! grep -q "Host github.com" /etc/ssh/ssh_config 2>/dev/null; then
-  echo "[INSTALL] Adding GitHub SSH config..."
-  cat <<EOF >> /etc/ssh/ssh_config
-
-# Sortrace Edge Device GitHub Access
-Host github.com
-    HostName github.com
-    User git
-    IdentityFile $SSH_KEY_PATH
-    IdentitiesOnly yes
+network={
+    ssid="$WIFI_SSID"
+    psk="$WIFI_PASSWORD"
+}
 EOF
-else
-  echo "[INSTALL] GitHub SSH config already present."
+
+  chmod 600 "$WPA_CONF"
+  systemctl enable --now wpa_supplicant
+  systemctl restart wpa_supplicant
 fi
 
-# Clone or pull repo
-if [ -d "$REPO_DIR/.git" ]; then
-  echo "[INSTALL] Repo already exists. Pulling latest changes..."
-  git -C "$REPO_DIR" pull
-else
-  echo "[INSTALL] Cloning repo..."
-  mkdir -p "$(dirname "$REPO_DIR")"
-  git clone "$REPO_URL" "$REPO_DIR"
-fi
+# Pull and run bootstrap container from Scaleway
+echo "[INSTALL] Pulling bootstrap container: $BOOTSTRAP_IMAGE"
+podman pull "$BOOTSTRAP_IMAGE"
 
-# Run setup.sh with forwarded arguments
-echo "[INSTALL] Running setup.sh..."
-bash "$REPO_DIR/setup.sh" \
-  --hostname "$DEVICE_HOSTNAME" \
-  --tailscale-key "$TAILSCALE_KEY" \
-  ${SIM_PIN:+--sim-pin "$SIM_PIN"} \
-  ${WIFI_SSID:+--wifi-ssid "$WIFI_SSID"} \
-  ${WIFI_PASSWORD:+--wifi-password "$WIFI_PASSWORD"}
+echo "[INSTALL] Running bootstrap container..."
+podman run -d --name sortrace-bootstrap \
+  --restart=always \
+  -v /run/podman/podman.sock:/run/podman/podman.sock \
+  -v /etc/sortrace:/etc/sortrace \
+  "$BOOTSTRAP_IMAGE"
 
 echo "[INSTALL] Installation complete!"
