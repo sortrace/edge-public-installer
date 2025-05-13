@@ -2,10 +2,11 @@
 
 set -e
 
+EDGE_API_URL="http://edge-api:8080"
+
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   key="$1"
-
   case $key in
     --hostname)
       NEW_HOSTNAME="$2"
@@ -13,10 +14,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --tailscale-key)
       TAILSCALE_KEY="$2"
-      shift; shift
-      ;;
-    --bootstrap-image)
-      BOOTSTRAP_IMAGE="$2"
       shift; shift
       ;;
     --sim-pin)
@@ -40,60 +37,45 @@ done
 
 mkdir -p /etc/sortrace
 
-# Validate bootstrap image
-if [ -z "$BOOTSTRAP_IMAGE" ]; then
-  echo "[INSTALL] ERROR: --bootstrap-image is required (e.g., registry.scaleway.com/sortrace/bootstrap:latest)"
-  exit 1
-fi
-
-# Optional hostname configuration
+# --- Hostname Configuration ---
 if [ -n "$NEW_HOSTNAME" ]; then
-  NEW_HOSTNAME="edge-device-${NEW_HOSTNAME#edge-device-}"  # Force prefix
+  NEW_HOSTNAME="edge-device-${NEW_HOSTNAME#edge-device-}"
   CURRENT_HOSTNAME=$(hostname)
 
-  if [[ "$NEW_HOSTNAME" == "$CURRENT_HOSTNAME" ]]; then
-    echo "[INSTALL] Hostname already set to $NEW_HOSTNAME. Skipping change."
-  else
+  if [[ "$NEW_HOSTNAME" != "$CURRENT_HOSTNAME" ]]; then
     echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
     hostnamectl set-hostname "$NEW_HOSTNAME"
-  fi
-
-  # Update /etc/hosts
-  if grep -q "^127.0.1.1" /etc/hosts; then
-    sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts
+    sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts || echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
   else
-    echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
+    echo "[INSTALL] Hostname already set to $NEW_HOSTNAME"
   fi
+else
+  NEW_HOSTNAME=$(hostname)
 fi
 
-# Ensure required packages
+# --- Install Dependencies ---
 echo "[INSTALL] Installing required packages..."
 apt-get update -qq
 apt-get install -y -qq podman curl jq
 
-# Tailscale installation and conditional setup
+# --- Tailscale Setup ---
 if [ -n "$TAILSCALE_KEY" ]; then
   echo "[INSTALL] Installing and configuring Tailscale..."
   curl -fsSL https://tailscale.com/install.sh | sh
   systemctl enable --now tailscaled
 
   if ! tailscale status &>/dev/null; then
-    echo "[INSTALL] Connecting to Tailscale with provided key..."
     tailscale up --authkey "$TAILSCALE_KEY"
-  else
-    echo "[INSTALL] Tailscale already connected."
   fi
 else
-  echo "[INSTALL] No Tailscale key provided. Checking existing connection..."
+  echo "[INSTALL] No Tailscale key provided. Checking existing Tailscale setup..."
   if ! command -v tailscale &>/dev/null || ! tailscale status &>/dev/null; then
     echo "[INSTALL] ERROR: Tailscale not set up and no key provided. Exiting."
     exit 1
-  else
-    echo "[INSTALL] Tailscale is already running."
   fi
 fi
 
-# Configure 4G modem if SIM PIN provided
+# --- Configure 4G Modem (if SIM PIN provided) ---
 if [ -n "$SIM_PIN" ]; then
   echo "[INSTALL] Configuring 4G modem..."
   apt-get install -y -qq mmcli network-manager
@@ -102,7 +84,7 @@ if [ -n "$SIM_PIN" ]; then
   mmcli -m 0 --enable
 fi
 
-# Configure WiFi if credentials are provided
+# --- Configure WiFi ---
 if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
   echo "[INSTALL] Configuring WiFi..."
   WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
@@ -113,21 +95,49 @@ network={
     psk="$WIFI_PASSWORD"
 }
 EOF
-
   chmod 600 "$WPA_CONF"
   systemctl enable --now wpa_supplicant
   systemctl restart wpa_supplicant
 fi
 
-# Pull and run bootstrap container from Scaleway
-echo "[INSTALL] Pulling bootstrap container: $BOOTSTRAP_IMAGE"
-podman pull "$BOOTSTRAP_IMAGE"
+# --- Download metadata and bootstrap image ---
+echo "[INSTALL] Fetching edge metadata for hostname: $NEW_HOSTNAME"
+META_JSON=$(curl -sf "$EDGE_API_URL/edge-meta/$NEW_HOSTNAME")
 
-echo "[INSTALL] Running bootstrap container..."
-podman run -d --name sortrace-bootstrap \
+BOOTSTRAP_IMAGE_NAME=$(echo "$META_JSON" | jq -r '.bootstrap.image')
+if [[ -z "$BOOTSTRAP_IMAGE_NAME" || "$BOOTSTRAP_IMAGE_NAME" == "null" ]]; then
+  echo "[INSTALL] ERROR: Failed to extract bootstrap image name from metadata"
+  exit 1
+fi
+
+echo "[INSTALL] Resolving signed URL for image: $BOOTSTRAP_IMAGE_NAME"
+BOOTSTRAP_IMAGE_URL=$(curl -sf "$EDGE_API_URL/image-url?name=$BOOTSTRAP_IMAGE_NAME" | jq -r .url)
+if [[ -z "$BOOTSTRAP_IMAGE_URL" || "$BOOTSTRAP_IMAGE_URL" == "null" ]]; then
+  echo "[INSTALL] ERROR: Failed to resolve image URL"
+  exit 1
+fi
+
+echo "[INSTALL] Downloading bootstrap image tarball..."
+curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar.gz
+
+# --- Stop existing container if running ---
+if podman container exists edge-device-bootstrap; then
+  echo "[INSTALL] Stopping existing bootstrap container..."
+  podman stop edge-device-bootstrap || true
+  podman rm edge-device-bootstrap || true
+fi
+
+# --- Load and run new bootstrap container ---
+echo "[INSTALL] Loading bootstrap image into Podman..."
+podman load -i /tmp/bootstrap-image.tar.gz
+
+IMAGE_ID=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 'bootstrap')
+
+echo "[INSTALL] Starting bootstrap container: $IMAGE_ID"
+podman run -d --name edge-device-bootstrap \
   --restart=always \
   -v /run/podman/podman.sock:/run/podman/podman.sock \
   -v /etc/sortrace:/etc/sortrace \
-  "$BOOTSTRAP_IMAGE"
+  $IMAGE_ID
 
 echo "[INSTALL] Installation complete!"
