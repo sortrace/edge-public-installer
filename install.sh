@@ -120,8 +120,8 @@ fi
 echo "[INSTALL] Downloading bootstrap image tarball from $BOOTSTRAP_IMAGE_URL"
 curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar
 
-echo "[INSTALL] Decompressing tarball..."
-gunzip -f /tmp/bootstrap-image.tar.gz
+# echo "[INSTALL] Decompressing tarball..."
+# gunzip -f /tmp/bootstrap-image.tar.gz
 
 # --- Stop existing container if running ---
 if podman container exists edge-device-bootstrap; then
