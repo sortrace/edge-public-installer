@@ -1,8 +1,14 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
+trap 'echo "[ERROR] Command failed at line $LINENO: $BASH_COMMAND"' ERR
 
 EDGE_API_URL="http://edge-api:8080"
+NEW_HOSTNAME=""
+TAILSCALE_KEY=""
+SIM_PIN=""
+WIFI_SSID=""
+WIFI_PASSWORD=""
 ARCH=""
 
 # Parse arguments
@@ -126,16 +132,10 @@ echo "[INSTALL] Downloading bootstrap image tarball from $BOOTSTRAP_IMAGE_URL"
 IMAGE_TAR_PATH="$HOME/bootstrap-image.tar"
 curl -L "$BOOTSTRAP_IMAGE_URL" -o "$IMAGE_TAR_PATH"
 
-# --- Stop existing container if running ---
-if podman container exists edge-device-bootstrap; then
-  echo "[INSTALL] Stopping and removing existing bootstrap container..."
-  podman rm -f edge-device-bootstrap || true
-fi
-
 echo "[INSTALL] Loading bootstrap image into Podman..."
-podman load -i "$IMAGE_TAR_PATH"
+sudo podman load -i "$IMAGE_TAR_PATH"
 
-IMAGE_REF=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 '^edge-bootstrap:')
+IMAGE_REF=$(sudo podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 'edge-bootstrap:')
 
 echo "[INSTALL] Starting bootstrap container: $IMAGE_REF"
 
@@ -145,11 +145,41 @@ if [ -n "$ARCH" ]; then
   ARCH_OPTION="--arch=$ARCH"
 fi
 
-podman run -d --name edge-device-bootstrap \
+echo "[INSTALL] Creating or updating systemd service for bootstrap container..."
+
+# Stop and remove existing container if it exists
+if sudo podman container exists edge-device-bootstrap; then
+  echo "[INSTALL] Removing existing container..."
+  sudo podman rm -f edge-device-bootstrap
+fi
+
+# (Re)create the container
+sudo podman create --name edge-device-bootstrap \
   --restart=always \
   -v /run/podman/podman.sock:/run/podman/podman.sock \
   -v /etc/sortrace:/etc/sortrace \
   $ARCH_OPTION \
   $IMAGE_REF
 
-echo "[INSTALL] ✅ Installation complete!"
+# Generate new systemd unit file
+sudo podman generate systemd --name edge-device-bootstrap --files --restart-policy=always
+
+SERVICE_FILE="container-edge-device-bootstrap.service"
+SYSTEMD_TARGET="/etc/systemd/system/$SERVICE_FILE"
+
+# Overwrite the old service unit
+sudo mv -f "$SERVICE_FILE" "$SYSTEMD_TARGET"
+
+# Ensure RestartSec=10 exists or is updated
+if grep -q '^RestartSec=' "$SYSTEMD_TARGET"; then
+  sudo sed -i 's/^RestartSec=.*/RestartSec=10/' "$SYSTEMD_TARGET"
+else
+  sudo sed -i '/^\[Service\]/a RestartSec=10' "$SYSTEMD_TARGET"
+fi
+
+# Reload and restart systemd service
+sudo systemctl daemon-reload
+sudo systemctl enable "$SERVICE_FILE"
+sudo systemctl restart "$SERVICE_FILE"
+
+echo "[INSTALL] ✅ Bootstrap service is running with a 10s restart delay."
