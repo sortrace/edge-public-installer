@@ -155,7 +155,6 @@ fi
 
 # (Re)create the container
 sudo podman create --name edge-device-bootstrap \
-  --restart=always \
   -v /run/podman/podman.sock:/run/podman/podman.sock \
   -v /etc/sortrace:/etc/sortrace \
   $ARCH_OPTION \
