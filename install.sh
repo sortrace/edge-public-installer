@@ -49,8 +49,8 @@ if [ -n "$NEW_HOSTNAME" ]; then
 
   if [[ "$NEW_HOSTNAME" != "$CURRENT_HOSTNAME" ]]; then
     echo "[INSTALL] Setting hostname to $NEW_HOSTNAME"
-    hostnamectl set-hostname "$NEW_HOSTNAME"
-    sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts || echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
+    sudo hostnamectl set-hostname "$NEW_HOSTNAME"
+    sudo sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts || echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
   else
     echo "[INSTALL] Hostname already set to $NEW_HOSTNAME"
   fi
@@ -60,8 +60,8 @@ fi
 
 # --- Install Dependencies ---
 echo "[INSTALL] Installing required packages..."
-apt-get update -qq
-apt-get install -y -qq podman curl jq
+sudo apt-get update -qq
+sudo apt-get install -y -qq podman curl jq
 
 # --- Tailscale Setup ---
 if [ -n "$TAILSCALE_KEY" ]; then
@@ -83,7 +83,7 @@ fi
 # --- Configure 4G Modem (if SIM PIN provided) ---
 if [ -n "$SIM_PIN" ]; then
   echo "[INSTALL] Configuring 4G modem..."
-  apt-get install -y -qq mmcli network-manager
+  sudo apt-get install -y -qq mmcli network-manager
   mmcli -i 0 --disable-pin --pin="$SIM_PIN"
   mmcli -m 0 --simple-connect="apn=online.telia.se"
   mmcli -m 0 --enable
@@ -93,16 +93,16 @@ fi
 if [ -n "$WIFI_SSID" ] && [ -n "$WIFI_PASSWORD" ]; then
   echo "[INSTALL] Configuring WiFi..."
   WPA_CONF="/etc/wpa_supplicant/wpa_supplicant.conf"
-  cat <<EOF >> "$WPA_CONF"
+  sudo tee -a "$WPA_CONF" > /dev/null <<EOF
 
 network={
     ssid="$WIFI_SSID"
     psk="$WIFI_PASSWORD"
 }
 EOF
-  chmod 600 "$WPA_CONF"
-  systemctl enable --now wpa_supplicant
-  systemctl restart wpa_supplicant
+  sudo chmod 600 "$WPA_CONF"
+  sudo systemctl enable --now wpa_supplicant
+  sudo systemctl restart wpa_supplicant
 fi
 
 # --- Download metadata and bootstrap image ---
@@ -123,7 +123,8 @@ if [ -z "$BOOTSTRAP_IMAGE_URL" ] || [ "$BOOTSTRAP_IMAGE_URL" = "null" ]; then
 fi
 
 echo "[INSTALL] Downloading bootstrap image tarball from $BOOTSTRAP_IMAGE_URL"
-curl -L "$BOOTSTRAP_IMAGE_URL" -o /tmp/bootstrap-image.tar
+IMAGE_TAR_PATH="$HOME/bootstrap-image.tar"
+curl -L "$BOOTSTRAP_IMAGE_URL" -o "$IMAGE_TAR_PATH"
 
 # --- Stop existing container if running ---
 if podman container exists edge-device-bootstrap; then
@@ -132,11 +133,11 @@ if podman container exists edge-device-bootstrap; then
 fi
 
 echo "[INSTALL] Loading bootstrap image into Podman..."
-podman load -i /tmp/bootstrap-image.tar
+podman load -i "$IMAGE_TAR_PATH"
 
-IMAGE_ID=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 'bootstrap')
+IMAGE_REF=$(podman images --format "{{.Repository}}:{{.Tag}}" | grep -m1 '^edge-bootstrap:')
 
-echo "[INSTALL] Starting bootstrap container: $IMAGE_ID"
+echo "[INSTALL] Starting bootstrap container: $IMAGE_REF"
 
 # Conditionally add architecture if provided
 ARCH_OPTION=""
@@ -149,6 +150,6 @@ podman run -d --name edge-device-bootstrap \
   -v /run/podman/podman.sock:/run/podman/podman.sock \
   -v /etc/sortrace:/etc/sortrace \
   $ARCH_OPTION \
-  $IMAGE_ID
+  $IMAGE_REF
 
 echo "[INSTALL] ✅ Installation complete!"
