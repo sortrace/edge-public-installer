@@ -161,7 +161,7 @@ sudo podman create --name edge-device-bootstrap \
   $IMAGE_REF
 
 # Generate new systemd unit file
-sudo podman generate systemd --name edge-device-bootstrap --files --restart-policy=always
+sudo podman generate systemd --name edge-device-bootstrap --files
 
 SERVICE_FILE="container-edge-device-bootstrap.service"
 SYSTEMD_TARGET="/etc/systemd/system/$SERVICE_FILE"
