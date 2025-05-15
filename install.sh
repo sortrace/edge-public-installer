@@ -157,7 +157,7 @@ fi
 sudo podman create --name edge-device-bootstrap \
   -v /run/podman/podman.sock:/run/podman/podman.sock \
   -v /etc/sortrace:/etc/sortrace \
-  -v /etc/hostname:/etc/host_hostname:ro
+  -v /etc/hostname:/etc/host_hostname:ro \
   $ARCH_OPTION \
   $IMAGE_REF
 
