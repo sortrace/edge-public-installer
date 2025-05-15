@@ -20,8 +20,8 @@ if [[ "$SELF_PATH" != "$INSTALLER_PATH" ]]; then
 fi
 
 # Query latest version info
-echo "Checking latest version from $API_URL/$HOSTNAME/edge-meta..."
-RESPONSE=$(curl -fsSL "$API_URL/$HOSTNAME/edge-meta")
+echo "Checking latest version from $API_URL/edge-meta/$HOSTNAME..."
+RESPONSE=$(curl -fsSL "$API_URL/edge-meta/$HOSTNAME")
 PACKAGE_NAME=$(echo "$RESPONSE" | jq -r '.runtime.package')
 
 if [[ -z "$PACKAGE_NAME" || "$PACKAGE_NAME" == "null" ]]; then
