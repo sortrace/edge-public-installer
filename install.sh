@@ -12,11 +12,13 @@ HOSTNAME=$(hostname)
 mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/update"
 
 # If not running from installed location, copy ourselves there
-SELF_PATH="$(realpath "$0")"
-if [[ "$SELF_PATH" != "$INSTALLER_PATH" ]]; then
+SELF_PATH="$(realpath "$0" 2>/dev/null || true)"
+if [[ -n "$SELF_PATH" && -f "$SELF_PATH" && "$SELF_PATH" != "$INSTALLER_PATH" ]]; then
   echo "Copying installer to $INSTALLER_PATH"
   cp "$SELF_PATH" "$INSTALLER_PATH"
   chmod +x "$INSTALLER_PATH"
+else
+  echo "Installer not a local file — skipping self-copy"
 fi
 
 # Query latest version info
@@ -44,23 +46,26 @@ fi
 echo "Installing new version: $PACKAGE_NAME"
 
 # Get signed URL for the package
-SIGNED_URL=$(curl -fsSL "$API_URL/image-url/name=$PACKAGE_NAME" | jq -r '.url')
+SIGNED_URL=$(curl -fsSL "$API_URL/image-url?name=$PACKAGE_NAME" | jq -r '.url')
 if [[ -z "$SIGNED_URL" ]]; then
   echo "Failed to get signed download URL."
   exit 1
 fi
 
-# Download and extract
+# Download and extract with fixed filename
 TMP_DIR="/tmp/sortrace-install"
+PACKAGE_FILE="runtime-package.tar.tgz"
+
+echo "Preparing temp dir..."
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 cd "$TMP_DIR"
 
-echo "Downloading package..."
-curl -fsSL -o "$PACKAGE_NAME" "$SIGNED_URL"
+echo "Downloading package to $PACKAGE_FILE..."
+curl -fsSL -o "$PACKAGE_FILE" "$SIGNED_URL"
 
 echo "Extracting package..."
-tar -xzf "$PACKAGE_NAME"
+tar -xzf "$PACKAGE_FILE"
 
 # Stop existing service
 echo "Stopping sortrace-runtime service (if running)..."
@@ -71,8 +76,10 @@ echo "Installing to $INSTALL_DIR..."
 rsync -a --delete ./ "$INSTALL_DIR/"
 
 # Restore install.sh
-cp "$SELF_PATH" "$INSTALLER_PATH"
-chmod +x "$INSTALLER_PATH"
+if [[ -n "$SELF_PATH" && -f "$SELF_PATH" ]]; then
+  cp "$SELF_PATH" "$INSTALLER_PATH"
+  chmod +x "$INSTALLER_PATH"
+fi
 
 # Update version
 echo "$PACKAGE_NAME" > "$VERSION_FILE"
