@@ -1,91 +1,66 @@
 #!/bin/bash
-
 set -e
 
-INSTALL_DIR="/opt/sortrace"
-INSTALLER_PATH="$INSTALL_DIR/bin/install.sh"
-VERSION_FILE="$INSTALL_DIR/update/version.txt"
 API_URL="http://edge-api:8080"
 HOSTNAME=$(hostname)
+INSTALL_DIR="/opt/sortrace"
+LOG_DIR="/var/log/sortrace"
+LOG_FILE="$LOG_DIR/install.log"
+TMP_DIR="/tmp/sortrace-bootstrap"
+INSTALLER_SCRIPT="bin/install.sh"
 
-# Ensure install location exists
-mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/update"
+# Prepare logging
+mkdir -p "$LOG_DIR"
+touch "$LOG_FILE"
+chown root:root "$LOG_FILE"
+chmod 644 "$LOG_FILE"
 
-# If not running from installed location, copy ourselves there
-SELF_PATH="$(realpath "$0" 2>/dev/null || true)"
-if [[ -n "$SELF_PATH" && -f "$SELF_PATH" && "$SELF_PATH" != "$INSTALLER_PATH" ]]; then
-  echo "Copying installer to $INSTALLER_PATH"
-  cp "$SELF_PATH" "$INSTALLER_PATH"
-  chmod +x "$INSTALLER_PATH"
+log() {
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+# Check for supervisord
+if ! command -v supervisord >/dev/null 2>&1; then
+  log "supervisord not found — installing..."
+  sudo apt-get update
+  sudo apt-get install -y supervisor
 else
-  echo "Installer not a local file — skipping self-copy"
+  log "supervisord found at $(command -v supervisord)"
 fi
 
-# Query latest version info
-echo "Checking latest version from $API_URL/edge-meta/$HOSTNAME..."
-RESPONSE=$(curl -fsSL "$API_URL/edge-meta/$HOSTNAME")
-PACKAGE_NAME=$(echo "$RESPONSE" | jq -r '.runtime.package')
+# Get latest package info
+log "Checking latest version from $API_URL/edge-meta/$HOSTNAME..."
+PACKAGE_NAME=$(curl -fsSL "$API_URL/edge-meta/$HOSTNAME" | jq -r '.runtime.package')
 
 if [[ -z "$PACKAGE_NAME" || "$PACKAGE_NAME" == "null" ]]; then
-  echo "No runtime package found from API."
-  exit 1
-fi
-
-# Get current installed version
-if [[ -f "$VERSION_FILE" ]]; then
-  CURRENT_VERSION=$(cat "$VERSION_FILE")
-else
-  CURRENT_VERSION=""
-fi
-
-if [[ "$PACKAGE_NAME" == "$CURRENT_VERSION" ]]; then
-  echo "Already up to date: $CURRENT_VERSION"
+  log "No runtime package found from API. Exiting."
   exit 0
 fi
 
-echo "Installing new version: $PACKAGE_NAME"
-
-# Get signed URL for the package
+# Get signed URL
+log "Fetching signed URL for: $PACKAGE_NAME"
 SIGNED_URL=$(curl -fsSL "$API_URL/image-url?name=$PACKAGE_NAME" | jq -r '.url')
-if [[ -z "$SIGNED_URL" ]]; then
-  echo "Failed to get signed download URL."
+if [[ -z "$SIGNED_URL" || "$SIGNED_URL" == "null" ]]; then
+  log "Failed to retrieve signed download URL."
   exit 1
 fi
 
-# Download and extract with fixed filename
-TMP_DIR="/tmp/sortrace-install"
-PACKAGE_FILE="runtime-package.tar.tgz"
-
-echo "Preparing temp dir..."
+# Prepare temp workspace
+log "Downloading and extracting runtime package..."
 rm -rf "$TMP_DIR"
 mkdir -p "$TMP_DIR"
 cd "$TMP_DIR"
 
-echo "Downloading package to $PACKAGE_FILE..."
-curl -fsSL -o "$PACKAGE_FILE" "$SIGNED_URL"
+curl -fsSL -o runtime-package.tar.tgz "$SIGNED_URL"
+tar -xzf runtime-package.tar.tgz
 
-echo "Extracting package..."
-tar -xzf "$PACKAGE_FILE"
-
-# Stop existing service
-echo "Stopping sortrace-runtime service (if running)..."
-systemctl stop sortrace-runtime || true
-
-# Install files
-echo "Installing to $INSTALL_DIR..."
-rsync -a --delete ./ "$INSTALL_DIR/"
-
-# Restore install.sh
-if [[ -n "$SELF_PATH" && -f "$SELF_PATH" ]]; then
-  cp "$SELF_PATH" "$INSTALLER_PATH"
-  chmod +x "$INSTALLER_PATH"
+# Run embedded installer in detached mode
+if [[ ! -x "$INSTALLER_SCRIPT" ]]; then
+  log "ERROR: $INSTALLER_SCRIPT not found in extracted package"
+  exit 1
 fi
 
-# Update version
-echo "$PACKAGE_NAME" > "$VERSION_FILE"
+log "Running $INSTALLER_SCRIPT with version: $PACKAGE_NAME (detached)"
+nohup "./$INSTALLER_SCRIPT" "$PACKAGE_NAME" >> "$LOG_FILE" 2>&1 &
 
-# Start service
-echo "Starting sortrace-runtime..."
-systemctl start sortrace-runtime
-
-echo "✅ Install complete: $PACKAGE_NAME"
+log "✅ Bootstrap install launched. Check log for progress: $LOG_FILE"
