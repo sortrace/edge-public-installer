@@ -54,9 +54,15 @@ cd "$TMP_DIR"
 curl -fsSL -o runtime-package.tar.tgz "$SIGNED_URL"
 tar -xzf runtime-package.tar.tgz
 
-# Run embedded installer in detached mode
-if [[ ! -x "$INSTALLER_SCRIPT" ]]; then
-  log "ERROR: $INSTALLER_SCRIPT not found in extracted package"
+for i in {1..50}; do  # 50 × 0.1s = 5 seconds max
+  [[ -f bin/install.sh ]] && break
+  sleep 0.1
+done
+
+if [[ -f bin/install.sh ]]; then
+  ./bin/install.sh
+else
+  echo "❌ ERROR: bin/install.sh not found after extract"
   exit 1
 fi
 
