@@ -54,19 +54,18 @@ cd "$TMP_DIR"
 curl -fsSL -o runtime-package.tar.tgz "$SIGNED_URL"
 tar -xzf runtime-package.tar.tgz
 
-for i in {1..50}; do  # 50 × 0.1s = 5 seconds max
-  [[ -f bin/install.sh ]] && break
+for i in {1..50}; do
+  [[ -f "$INSTALLER_SCRIPT" ]] && break
   sleep 0.1
 done
 
-if [[ -f bin/install.sh ]]; then
-  ./bin/install.sh
+if [[ -f "$INSTALLER_SCRIPT" ]]; then
+  chmod +x "$INSTALLER_SCRIPT"
+  log "Running $INSTALLER_SCRIPT with version: $PACKAGE_NAME (detached)"
+  nohup "./$INSTALLER_SCRIPT" "$PACKAGE_NAME" >> "$LOG_FILE" 2>&1 &
 else
-  echo "❌ ERROR: bin/install.sh not found after extract"
+  log "❌ ERROR: $INSTALLER_SCRIPT not found after extract"
   exit 1
 fi
-
-log "Running $INSTALLER_SCRIPT with version: $PACKAGE_NAME (detached)"
-nohup "./$INSTALLER_SCRIPT" "$PACKAGE_NAME" >> "$LOG_FILE" 2>&1 &
 
 log "✅ Bootstrap install launched. Check log for progress: $LOG_FILE"
