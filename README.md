@@ -17,13 +17,14 @@ The `edge-public-installer` repository provides all scripts needed for setting u
 To install and configure a Sortrace device in one line, run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main/install.sh | sudo bash -s -- --scaleway-token "<your-scaleway-token>" --hostname "edge-truck-001" --tailscale-key "<your-tailscale-key>" --sim-pin "1234" --wifi-ssid "YourSSID" --wifi-password "YourWiFiPassword"
+curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main/install.sh -o install.sh
+chmod +x install.sh
+sudo ./install.sh --hostname "edge-device-000001" --sim-pin "1234" --wifi-ssid "YourSSID" --wifi-password "YourWiFiPassword"
 ```
 
 > ⚡ **Important:**  
 > You must provide:
 >
-> - A **Scaleway Token** (required)
 > - A **Tailscale Auth Key** (required)
 
 ---
@@ -56,11 +57,10 @@ curl -fsSL https://raw.githubusercontent.com/sortrace/edge-public-installer/main
 
 ### Supported Arguments for `install.sh`
 
-| Argument           | Purpose                                                     |
-| :----------------- | :---------------------------------------------------------- |
-| `--scaleway-token` | Scaleway token to authenticate config fetches.              |
-| `--hostname`       | Set a new hostname for the device. Must start with `edge-`. |
-| `--tailscale-key`  | Tailscale auth key to automatically join the VPN network.   |
-| `--sim-pin`        | SIM PIN code to unlock and enable 4G connection.            |
-| `--wifi-ssid`      | WiFi SSID if connecting via WiFi.                           |
-| `--wifi-password`  | WiFi password if connecting via WiFi.                       |
+| Argument          | Purpose                                                     |
+| :---------------- | :---------------------------------------------------------- |
+| `--hostname`      | Set a new hostname for the device. Must start with `edge-`. |
+| `--tailscale-key` | Tailscale auth key to automatically join the VPN network.   |
+| `--sim-pin`       | SIM PIN code to unlock and enable 4G connection.            |
+| `--wifi-ssid`     | WiFi SSID if connecting via WiFi.                           |
+| `--wifi-password` | WiFi password if connecting via WiFi.                       |
