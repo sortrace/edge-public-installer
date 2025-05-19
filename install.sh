@@ -2,7 +2,6 @@
 set -e
 
 API_URL="http://edge-api:8080"
-HOSTNAME=$(hostname)
 INSTALL_DIR="/opt/sortrace"
 LOG_DIR="/var/log/sortrace"
 LOG_FILE="$LOG_DIR/install.log"
@@ -14,6 +13,7 @@ TAILSCALE_KEY=""
 WIFI_SSID=""
 WIFI_PASSWORD=""
 SIM_PIN=""
+NEW_HOSTNAME=""
 
 # --- Parse CLI Args ---
 while [[ $# -gt 0 ]]; do
@@ -35,6 +35,10 @@ while [[ $# -gt 0 ]]; do
       SIM_PIN="$2"
       shift; shift
       ;;
+    --hostname)
+      NEW_HOSTNAME="$2"
+      shift; shift
+      ;;
     *)
       echo "[BOOTSTRAP] Unknown option: $1"
       exit 1
@@ -51,6 +55,23 @@ chmod 644 "$LOG_FILE"
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
+
+# --- Hostname Configuration ---
+if [ -n "$NEW_HOSTNAME" ]; then
+  NEW_HOSTNAME="edge-device-${NEW_HOSTNAME#edge-device-}"
+  CURRENT_HOSTNAME=$(hostname)
+
+  if [[ "$NEW_HOSTNAME" != "$CURRENT_HOSTNAME" ]]; then
+    log "Setting hostname to $NEW_HOSTNAME"
+    hostnamectl set-hostname "$NEW_HOSTNAME"
+    sed -i "s/^127.0.1.1.*/127.0.1.1   $NEW_HOSTNAME/" /etc/hosts || echo "127.0.1.1   $NEW_HOSTNAME" >> /etc/hosts
+  else
+    log "Hostname already set to $NEW_HOSTNAME"
+  fi
+else
+  NEW_HOSTNAME=$(hostname)
+  log "Using current hostname: $NEW_HOSTNAME"
+fi
 
 # --- Tailscale Setup ---
 if [ -n "$TAILSCALE_KEY" ]; then
@@ -69,18 +90,9 @@ else
   fi
 fi
 
-# Check for supervisord
-if ! command -v supervisord >/dev/null 2>&1; then
-  log "supervisord not found — installing..."
-  sudo apt-get update
-  sudo apt-get install -y supervisor
-else
-  log "supervisord found at $(command -v supervisord)"
-fi
-
 # Get latest package info
-log "Checking latest version from $API_URL/edge-meta/$HOSTNAME..."
-PACKAGE_NAME=$(curl -fsSL "$API_URL/edge-meta/$HOSTNAME" | jq -r '.runtime.package')
+log "Checking latest version from $API_URL/edge-meta/$NEW_HOSTNAME..."
+PACKAGE_NAME=$(curl -fsSL "$API_URL/edge-meta/$NEW_HOSTNAME" | jq -r '.runtime.package')
 
 if [[ -z "$PACKAGE_NAME" || "$PACKAGE_NAME" == "null" ]]; then
   log "No runtime package found from API. Exiting."
@@ -114,9 +126,11 @@ if [[ -f "$INSTALLER_SCRIPT" ]]; then
 
   log "Running $INSTALLER_SCRIPT with version: $PACKAGE_NAME (detached)"
   nohup "./$INSTALLER_SCRIPT" "$PACKAGE_NAME" \
+    --tailscale-key "$TAILSCALE_KEY" \
     --wifi-ssid "$WIFI_SSID" \
     --wifi-password "$WIFI_PASSWORD" \
     --sim-pin "$SIM_PIN" \
+    --hostname "$NEW_HOSTNAME" \
     >> "$LOG_FILE" 2>&1 &
 else
   log "❌ ERROR: $INSTALLER_SCRIPT not found after extract"
