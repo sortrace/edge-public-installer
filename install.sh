@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-API_URL="http://edge-api:8080"
+API_URL=""
 INSTALL_DIR="/opt/sortrace"
 LOG_DIR="/var/log/sortrace"
 LOG_FILE="$LOG_DIR/install.log"
@@ -89,6 +89,25 @@ else
     exit 1
   fi
 fi
+
+# Wait for Tailscale to be up
+log INFO "Waiting for Tailscale to become available..."
+until tailscale status --json &>/dev/null; do
+  sleep 2
+done
+log INFO "Tailscale is up."
+
+# Get Tailscale tags and determine the correct API URL
+TAILSCALE_TAGS=$(tailscale status --json | jq -r '.Self.Tags[]?')
+case "$TAILSCALE_TAGS" in
+  *tag:prod*) API_URL="http://edge-api-prod:8080" ;;
+  *tag:test*) API_URL="http://edge-api-test:8080" ;;
+  *tag:dev*) API_URL="http://edge-api-dev:8080" ;;
+  *tag:staging*) API_URL="http://edge-api-staging:8080" ;;
+  *) API_URL="http://edge-api:8080" ;;
+esac
+
+log INFO "Using API URL: $API_URL"
 
 # Get latest package info
 log "Checking latest version from $API_URL/edge-meta/$NEW_HOSTNAME..."
