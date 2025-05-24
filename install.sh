@@ -119,7 +119,7 @@ if [[ -z "$PACKAGE_NAME" || "$PACKAGE_NAME" == "null" ]]; then
 fi
 
 # Get signed URL
-log "Fetching signed URL for: $PACKAGE_NAME"
+log "Fetching signed URL for: $PACKAGE_NAME from $API_URL/image-url..."
 SIGNED_URL=$(curl -fsSL "$API_URL/image-url?name=$PACKAGE_NAME" | jq -r '.url')
 if [[ -z "$SIGNED_URL" || "$SIGNED_URL" == "null" ]]; then
   log "Failed to retrieve signed download URL."
