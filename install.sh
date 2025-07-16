@@ -97,6 +97,16 @@ until tailscale status --json &>/dev/null; do
 done
 log INFO "Tailscale is up."
 
+
+# --- Ensure jq is installed ---
+if ! command -v jq &>/dev/null; then
+  log "jq not found. Installing..."
+  apt-get update -y
+  apt-get install -y jq
+else
+  log "jq already installed. Skipping installation."
+fi
+
 # Get Tailscale tags and determine the correct API URL
 TAILSCALE_TAGS=$(tailscale status --json | jq -r '.Self.Tags[]?')
 case "$TAILSCALE_TAGS" in
