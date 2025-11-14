@@ -110,18 +110,18 @@ fi
 # Get Tailscale tags and determine the correct API URL
 TAILSCALE_TAGS=$(tailscale status --json | jq -r '.Self.Tags[]?')
 case "$TAILSCALE_TAGS" in
-  *tag:prod*) API_URL="http://edge-api-prod:8080" ;;
-  *tag:test*) API_URL="http://edge-api-test:8080" ;;
-  *tag:dev*) API_URL="http://edge-api-dev:8080" ;;
-  *tag:staging*) API_URL="http://edge-api-staging:8080" ;;
-  *) API_URL="http://edge-api:8080" ;;
+  *tag:prod*) API_URL="http://edge-api-prod.tail1ab977.ts.net:8080" ;;
+  *tag:test*) API_URL="http://edge-api-test.tail1ab977.ts.net:8080" ;;
+  *tag:dev*) API_URL="http://edge-api-dev.tail1ab977.ts.net:8080" ;;
+  *tag:staging*) API_URL="http://edge-api-staging.tail1ab977.ts.net:8080" ;;
+  *) API_URL="http://edge-api.tail1ab977.ts.net:8080" ;;
 esac
 
 log INFO "Using API URL: $API_URL"
 
 # Get latest package info
-log "Checking latest version from $API_URL/edge-meta/$NEW_HOSTNAME..."
-PACKAGE_NAME=$(curl -fsSL "$API_URL/edge-meta/$NEW_HOSTNAME" | jq -r '.runtime.package')
+log "Checking latest version from $API_URL/config/$NEW_HOSTNAME..."
+PACKAGE_NAME=$(curl -fsSL "$API_URL/config/$NEW_HOSTNAME" | jq -r '.config.runtime')
 
 if [[ -z "$PACKAGE_NAME" || "$PACKAGE_NAME" == "null" ]]; then
   log "No runtime package found from API. Exiting."
