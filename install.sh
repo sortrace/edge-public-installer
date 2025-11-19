@@ -154,13 +154,13 @@ if [[ -f "$INSTALLER_SCRIPT" ]]; then
   chmod +x "$INSTALLER_SCRIPT"
 
   log "Running $INSTALLER_SCRIPT with version: $PACKAGE_NAME (detached)"
-  nohup "./$INSTALLER_SCRIPT" "$PACKAGE_NAME" \
+  nohup "./$INSTALLER_SCRIPT" \
     --tailscale-key "$TAILSCALE_KEY" \
     --wifi-ssid "$WIFI_SSID" \
     --wifi-password "$WIFI_PASSWORD" \
     --sim-pin "$SIM_PIN" \
     --hostname "$NEW_HOSTNAME" \
-    >> "$LOG_FILE" 2>&1 &
+    "$PACKAGE_NAME" >> "$LOG_FILE" 2>&1 &
 else
   log "❌ ERROR: $INSTALLER_SCRIPT not found after extract"
   exit 1
